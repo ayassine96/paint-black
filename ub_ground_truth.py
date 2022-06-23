@@ -150,7 +150,8 @@ if __name__ == "__main__":
     chrono = SimpleChrono()
 
     df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
-    display(df)
+    pd.set_option("display.max_rows", None, "display.max_columns", None)
+    print(df)
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
     am = AddressMapper(chain)
