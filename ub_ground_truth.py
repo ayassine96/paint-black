@@ -149,9 +149,9 @@ if __name__ == "__main__":
     # heur_mem    = zarr.open_array(memstore)
     chrono = SimpleChrono()
 
-    df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
-    pd.set_option("display.max_rows", None, "display.max_columns", None)
-    print(df)
+    df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv") # TODO: add column names ?
+    #pd.set_option("display.max_rows", None, "display.max_columns", None) TODO: remove
+    #print(df)
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg")
     am = AddressMapper(chain)
