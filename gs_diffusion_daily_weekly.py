@@ -28,7 +28,7 @@ from collections import defaultdict
 import logging
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, filename="logfile", filemode="a+",
+    logging.basicConfig(level=logging.DEBUG, filename="logfile_daily_weekly", filemode="a+",
                         format="%(asctime)-15s %(levelname)-8s %(message)s")
 
 from util import SYMBOLS, DIR_BCHAIN, DIR_PARSED, SimpleChrono
@@ -132,55 +132,8 @@ class AddressMapper(): # same as before
     def __getitem__(self,addr):
         return self.__offsets[addr.raw_type]+ addr.address_num-1
 
-def g_add_trx(inp,outp, value):
-
-    if inp == outp: return
-
-    if g.has_edge(inp,outp):
-#        if outp in trxOuts: #for the same trx we create only 1 edge
-#            # more outputs of the same cluster = 1 edge: update only the value
-#            g[inp][outp]['value'] = g[inp][outp]['value'] + value
-#        else:
-            # update existing edge summing current value and raising number of transaction (n_tx)
-            g[inp][outp]['value'] = g[inp][outp]['value'] + value
-            g[inp][outp]['n_tx']  = g[inp][outp]['n_tx']  + 1
-         #   trxOuts.add(outp)
-    else:
-        # creating new edge
-        #if inp != outp:
-            g.add_edge(inp,outp)
-            g[inp][outp]['value'] = value
-            g[inp][outp]['n_tx']  = 1
-         #   trxOuts.add(outp)
-
 def daterange(date1, date2, by=1):
     return [  date1 + timedelta(n) for n in range(0, int((date2 - date1).days)+1, by) ]
-
-class Graph:
-    
-    def __init__(self):
-        self.graph = dict()
-        
-        
-    def add_edge(self, node1, node2, cost):
-        if node1 not in self.graph:
-            self.graph[node1] = []
-            
-        if node2 not in self.graph:
-            self.graph[node2] = []
-        
-        self.graph[node1].append((node2, int(cost)))
-        
-        if len(self.graph[node1]) == 0:
-            self.graph.pop(node1)
-        
-    def print_graph(self):
-        
-        for source, destination in self.graph.items():
-            print(f"{source}->{destination}")
-    
-    def graph_size(self):
-        return len(self.graph)
 
 if __name__ == "__main__":
     options, args = parse_command_line()
@@ -238,9 +191,6 @@ if __name__ == "__main__":
             except:
                 print(dayrange[0], dayrange[1], "cannot be processed")
                 continue
-            
-            # Initialize a graph object
-            g = nx.DiGraph()
 
             for block in dayblocks:
 
@@ -284,10 +234,10 @@ if __name__ == "__main__":
 
                         # if the input(address) has already been clustered
                         if cluster in list(clustered_inputs_dict.keys()):
-                            clustered_inputs_dict[cluster].append(value)
+                            clustered_inputs_dict[cluster] += value
                             
                         else:
-                            clustered_inputs_dict[cluster] = [value]
+                            clustered_inputs_dict[cluster] = value
                             
                         total_trx_input_value = total_trx_input_value + value
                     
@@ -300,12 +250,11 @@ if __name__ == "__main__":
                         if cluster in clust_is_black_ground_set:
                             trx_is_dark = True
                             
-
                         # if the input(address) has already been clustered
                         if cluster in list(clustered_outputs_dict.keys()):
-                            clustered_outputs_dict[cluster].append(value)
+                            clustered_outputs_dict[cluster] += value
                         else:
-                            clustered_outputs_dict[cluster] = [value]
+                            clustered_outputs_dict[cluster] = value
                     
 
                     for out_sender, sender_value in clustered_inputs_dict.items():
@@ -327,43 +276,51 @@ if __name__ == "__main__":
                                 # print(f'{out_receiver} is a black node')
 
                             # Calculate the weight of the edge and add the edge to the graph
-                            weight = sum(sender_value)/total_trx_input_value*sum(receiver_value)
-
-                            g_add_trx(out_sender,out_receiver, weight)
+                            weight = sender_value/total_trx_input_value*receiver_value
                             
-                            #Calculate the dark ratio of the sender
-                            
+                            #Calculate the previous dark ratio of the sender
                             if current_assets[out_sender] > 0:
-                                dark_ratio[out_sender] = dark_assets[out_sender] / current_assets[out_sender]
+                                if out_sender in clust_is_black_ground_set:
+                                    dark_assets[out_sender] = current_assets[out_sender]
+                                    dark_ratio[out_sender] = 1
+                                else:
+                                    dark_ratio[out_sender] = max(0, dark_assets[out_sender] / current_assets[out_sender]) #compute x1 - xn
+                            elif current_assets[out_sender] == 0:
+                                dark_assets[out_sender] = 0
+                                dark_ratio[out_sender] = 0
+                            else:
+                                current_assets[out_sender] = 0
+                                dark_assets[out_sender] = 0
+                                dark_ratio[out_sender] = 0
 
-                            #update the current assets of the sender
-                            current_assets[out_sender] = current_assets[out_sender] - weight
+                            #update the current and dark assets of the sender
+                            current_assets[out_sender] = max(0, current_assets[out_sender] - weight) #compute a1(1)
+                            dark_assets[out_sender] = max(0, dark_assets[out_sender] - (weight*dark_ratio[out_sender])) #compute d1(1)
 
-                            #Update the current assets of the receiver
+                            #Update the current and dark assets of the receiver
                             current_assets[out_receiver] = current_assets[out_receiver] + weight
-
-                            #update the dark assets of the sender and receiver.
-                            dark_assets[out_sender] = dark_assets[out_sender] - (weight*dark_ratio[out_sender])
-                            dark_assets[out_receiver] = dark_assets[out_receiver]+ (weight*dark_ratio[out_sender])
-
-                            #update dark ratio of the receiver and receiver
-                            if current_assets[out_receiver] > 0:
-                                dark_ratio[out_receiver] = dark_assets[out_receiver]/current_assets[out_receiver]
+                            dark_assets[out_receiver] = dark_assets[out_receiver] + (weight*dark_ratio[out_sender])
                             
+                            #update dark ratio of the receiver and sender
+                            if current_assets[out_receiver] > 0:
+                                if out_receiver in clust_is_black_ground_set:
+                                    dark_assets[out_receiver] = current_assets[out_receiver]
+                                    dark_ratio[out_receiver] = 1
+                                else:
+                                    dark_ratio[out_receiver] = max(0, dark_assets[out_receiver] / current_assets[out_receiver])
+                            else:
+                                dark_assets[out_receiver] = 0
+                                dark_ratio[out_receiver] = 0
+                    
                             if current_assets[out_sender] > 0:
-                                dark_ratio[out_sender] = dark_assets[out_sender]/current_assets[out_sender]
-
-                # Initialize and save per block
-                current_assets_values = np.array(list(current_assets.values()))
-                dark_ratio_values = np.array(list(dark_ratio.values()))
-                current_assets_index = np.array(list(current_assets.keys()))
-                dark_ratio_index = np.array(list(dark_ratio.keys()))
-
-                savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/blocks/"
-                zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{str(block.height).zfill(6)}.zarr', dark_ratio_values)
-                zarr.save(savelocation + f'current_assets/current_assets_values_{str(block.height).zfill(6)}.zarr', current_assets_values)
-                zarr.save(savelocation + f'current_assets_index/current_assets_index_{str(block.height).zfill(6)}.zarr', current_assets_index)
-                zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{str(block.height).zfill(6)}.zarr', dark_ratio_index)
+                                if out_sender in clust_is_black_ground_set:
+                                    dark_assets[out_sender] = current_assets[out_sender]
+                                    dark_ratio[out_sender] = 1
+                                else:
+                                    dark_ratio[out_sender] = max(0, dark_assets[out_sender] / current_assets[out_sender])
+                            else:
+                                dark_assets[out_receiver] = 0
+                                dark_ratio[out_receiver] = 0
                 
 
             # Initialize and save per day
@@ -372,20 +329,20 @@ if __name__ == "__main__":
             current_assets_index = np.array(list(current_assets.keys()))
             dark_ratio_index = np.array(list(dark_ratio.keys()))
 
-            savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/daily/"
+            savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final_daily_weekly/daily/"
             zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
             zarr.save(savelocation + f'current_assets/current_assets_values_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values)
             zarr.save(savelocation + f'current_assets_index/current_assets_index_{day.strftime("%Y-%m-%d")}.zarr', current_assets_index)
-            zarr.save(savelocation + f'dark_assets_index/dark_ratio_index_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
+            zarr.save(savelocation + f'dark_ratio_index/dark_ratio_index_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_index)
             logging.info(f'results day:{day}')
 
-        # Initialize and save per block
+        # Initialize and save per week
         current_assets_values = np.array(list(current_assets.values()))
         dark_ratio_values = np.array(list(dark_ratio.values()))
         current_assets_index = np.array(list(current_assets.keys()))
         dark_ratio_index = np.array(list(dark_ratio.keys()))
 
-        savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final/weekly/"
+        savelocation = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final_daily_weekly/weekly/"
         zarr.save(savelocation + f'dark_ratio/dark_ratio_values_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values)
         zarr.save(savelocation + f'current_assets/current_assets_values_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values)
         zarr.save(savelocation + f'current_assets_index/current_assets_index_{week.strftime("%Y-%m-%d")}.zarr', current_assets_index)
