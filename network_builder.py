@@ -145,33 +145,25 @@ def g_add_trx(inp,outp, value):
             g[inp][outp]['n_tx']  = 1
     
 def build_current_dictionary(asset, idx):
+
+    current_assets_zarr = zarr.load(asset)
+    current_assets_index_zarr = zarr.load(idx)
     
-    current_assets_dict = defaultdict(int)
-    
-    current_assets = zarr.load(asset)
-    current_index =  zarr.load(idx)
-    
-    for i in range(len(current_assets)):
-        current_assets_dict[current_index[i]] = current_assets[i]
+    current_assets_dict = dict(zip(current_assets_index_zarr, current_assets_zarr))
         
     return current_assets_dict
         
         
 def build_dark_dictionary(ratio, idx):
-    dark_ratio_dict = defaultdict(int)
+
+    dark_ratio_zarr = zarr.load(ratio)
+    dark_ratio_index_zarr = zarr.load(idx)
     
-    dark_ratio = zarr.load(ratio)
-    dark_index = zarr.load(idx)
-    
-    if os.path.exists(ratio) & os.path.exists(idx): 
-        for i in range(len(dark_ratio)):
-            dark_ratio_dict[dark_index[i]] = dark_ratio[i]
+    dark_ratio_dict = dict(zip(dark_ratio_index_zarr, dark_ratio_zarr))
     
     return dark_ratio_dict
 
-
-def g_add_node(node, day):
-    
+def load_dictionaries(day):
     current_assets_path = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final_daily_weekly/daily/current_assets/"
     
     current_index_path = "/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/heur_1_data_final_daily_weekly/daily/current_assets_index/"
@@ -192,13 +184,27 @@ def g_add_node(node, day):
     
     if os.path.exists(dark_ratio_file) and os.path.exists(dark_index_file):
         dark_ratios_dict = build_dark_dictionary(dark_ratio_file, dark_index_file)
- 
+    
+    return current_assets_dict,dark_ratios_dict
+
+def g_add_node_attributes(node):
+
     #print(current_assets_dict)
     # print(node)
     # print(current_assets_dict[node])
     # print(dark_ratios_dict[node])
+
+    # if g.has_node(node):
+    #     # g[node]['current_assets'] = current_assets_dict[node]
+    #     # g[node]['dark_ratio']  = dark_ratios_dict[node]
+    #     attrs_n = [node, {'current_assets': current_assets_dict[node], 'dark_ratio': dark_ratios_dict[node]}]
+    #     nx.set_node_attributes(g, attrs_n)
+    #     G.node[node]['Attributes']
     
-    g.add_node(node, current_assets = current_assets_dict[node], dark_ratio = dark_ratios_dict[node])
+    if g.has_node(node):
+        g.nodes[node]['current_assets'] = current_assets_dict[node]
+        g.nodes[node]['dark_ratio'] = dark_ratios_dict[node]
+    # g.add_node(node, current_assets = current_assets_dict[node], dark_ratio = dark_ratios_dict[node])
                     
                 
                 
@@ -209,17 +215,8 @@ if __name__ == "__main__":
     options, args = parse_command_line()
     chrono      = SimpleChrono()
     chain       = blocksci.Blockchain("/local/scratch/exported/blockchain_parsed/bitcoin_old.cfg")
-    am          = AddressMapper(chain)
-    am.load_clusters(f"{options.cluster_folder}_data")
 
-    nrBlocks    = len(chain.blocks.to_list())
     chrono.print(message="init")
-
-    #status variables
-    printStatus = 5000 #print status very x block
-    iterBlock   = 0    #block counter, nr max printStatus
-    countBlock  = 0    #nr of read blocks
-    exit        = 50000
 
     chrono.add_tic('proc')
     if options.start_date == None:
@@ -233,6 +230,7 @@ if __name__ == "__main__":
     
     daylist = daterange(start_date, end_date, by=options.frequency)
     tqdm_bar = tqdm(daylist, desc="processed files")
+
     for day in tqdm_bar:
 #       chrono.add_tic("net0")
         dayrange = [day, day + timedelta(days=options.frequency)]
@@ -242,42 +240,37 @@ if __name__ == "__main__":
             print(dayrange[0], dayrange[1], "cannot be processed")
             continue
             
-#       chrono.print("net0", "block list")
         chrono.add_tic("net")
         g = nx.DiGraph()
 
-        for b in dayblocks:
-            for trx in b.txes:
-                if trx.is_coinbase: continue
-#                if not trx.is_coinbase:
-                tup_inputs = {}
-                tup_outputs = {}
+        networks_daily_path = "/local/scratch/exported/blockchain_parsed/bitcoin/heur_1_networks_day"
+        daily_graph_file = f"{networks_daily_path}/{day.strftime('%Y-%m-%d')}.graphml.bz2"
+        
+        g = nx.read_graphml(daily_graph_file)
 
-                    # Builds reduced representation of inputs
-                trx_input_value = 0
-                for inp in trx.inputs:
-                        cluster, value= am.cluster[am[inp.address]], inp.value
-                        if cluster in tup_inputs:
-                            tup_inputs[cluster] += value
-                        else:
-                            tup_inputs[cluster] = value
-                        trx_input_value += value
-                    # Builds reduced representation of outputs
-                for out in trx.outputs:
-                        cluster, value= am.cluster[am[out.address]], out.value
-                        if cluster in tup_outputs:
-                            tup_outputs[cluster] += value
-                        else:
-                            tup_outputs[cluster] = value
+        current_assets_dict_full, dark_ratios_dict_full = load_dictionaries(day)
 
-                for out_sender, sender_value in tup_inputs.items():
-                    if trx_input_value == 0: continue
-                    for out_receiver, receiver_value  in tup_outputs.items():
-                        g_add_node(out_sender, day.strftime('%Y-%m-%d'))
-                        g_add_node(out_receiver, day.strftime('%Y-%m-%d'))
-                        g_add_trx(out_sender,out_receiver, sender_value/trx_input_value*receiver_value)
-        #fname = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_akshay/heur_1_network_daily/{day.strftime('%Y-%m-%d')}.graphml.bz2"
-        print(g.nodes.data())
+        list_of_nodes = list(g.nodes)
+
+        # print(f'list of nodes of size {len(list_of_nodes)}: {list_of_nodes}')
+        
+        current_assets_dict_filtered = { k: current_assets_dict_full[int(k)] for k in list_of_nodes }
+        dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
+        # print(current_assets_dict_filtered)
+        # print(dark_ratios_dict_filtered)    
+
+
+        # print(f"adding graph attributes for {day.strftime('%Y-%m-%d')}")
+        for node in g.nodes():
+            
+            nx.set_node_attributes(g, {node:current_assets_dict_filtered[node]}, 'current_assets')
+            
+            nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
+            
+        
+        # print(f'size of g.nodes :{len(g.nodes(data=True))}')
+        # print(g.nodes(data=True))
+        
         # nx.draw(g)
         # plt.show()
         tqdm_bar.set_description(f"'{day.strftime('%Y-%m-%d')} b ' took {chrono.elapsed('net')} sec", refresh=True)
