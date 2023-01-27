@@ -1,0 +1,6 @@
+uniform_black/
+relevant_csv_files/
+logfiles/
+graphs/
+.ipynb_checkpoints
+__pycache__

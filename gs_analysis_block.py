@@ -1,38 +1,39 @@
 #!/usr/bin/env python3
 """
 TODO:
+# This script uses the results from the last two scripts to creates large csv of interesting features 
 - add total_clusters in the block as union of clusters input and clusters output
 OUTPUT
 ------
     - csv file, by row
-        'block',
-        'no_old_black_clusters',
-        'no_new_black_clusters',
-        'no_black_clusters_input',
-        'no_black_clusters_output',
-        'no_old_black_clusters_output',
-        'no_new_black_clusters_output',
-        'no_black_clusters_cumulative',
-        'no_active_black_clusters',
-            'no_white_clusters_input'
-            'no_white_clusters_output'
-        'no_active_white_clusters',
-        'no_clusters_input',
-        'no_clusters_output',
-            'no_clusters_cumulative'
-            'no_active_clusters'
-        'black2black_no_links',
-        'black2white_no_links',
-        'white2black_no_links',
-        'white2white_no_links',
-        'no_links',
-            'vol_black_trxs',
-            'vol_white_trxs'
-        'no_black_trxs',
-        'no_white_trxs',
-        'total_trxs'
+        'block', # for each block b
+        'no_old_black_clusters', # number of "old" black clusters (before b is added)
+        'no_new_black_clusters', # number of new black clusters created in this block
+        'no_black_clusters_input',  # number of new black clusters which appear as input in b   
+        'no_black_clusters_output', # number of new black clusters which appear as output on n
+        'no_old_black_clusters_output', # number of old black clusters as output in b
+        'no_new_black_clusters_output', # number of new black clusters as output in b
+        'no_black_clusters_cumulative', # At block b, what is the cumulative black clusters we found
+        'no_active_black_clusters', # At block b, what the number of active (I/O) black clusters we found
+        'no_white_clusters_input', # number of clusters which is not black as input
+        'no_white_clusters_output', # number of clusters which is not black as output
+        'no_active_white_clusters', # number of active (I/O) clusters which is not black
+        'no_clusters_input', # number of clusters which are used as input in b
+        'no_clusters_output', # number of clusters which are used as output in b
+        'no_clusters_cumulative'  # cumulative number of all clusters at b
+        'no_active_clusters',  # number of active clusters in b 
+        'black2black_no_links', # number of links between b2b
+        'black2white_no_links', # number of links between b2w
+        'white2black_no_links', # number of links between w2b
+        'white2white_no_links', # number of links between w2w
+        'no_links', # total number of links
+        'vol_black_trxs', # actual ammount of black bitcoin exchanged in that block
+        'vol_white_trxs' # actual ammount of white bitcoin exchanged in that block
+        'no_black_trxs', # number of black transactions
+        'no_white_trxs', # number of white transactions
+        'total_trxs' # total number of transactions
 """
-
+# this file is responsible for creating the features from the previous data. It is unfinished, and we can add more features if we want.
 
 import blocksci
 
@@ -52,7 +53,7 @@ from itertools import compress
 from util import SYMBOLS, DIR_PARSED, SimpleChrono
 
 
-def parse_command_line():
+def parse_command_line(): # more options than before
     import optparse
 
     parser = optparse.OptionParser()
@@ -62,7 +63,7 @@ def parse_command_line():
     parser.add_option("--heur", action='store', dest="heuristic", type='str',
                       default=None, help="heuristics to apply")
     parser.add_option("--overwrite", action='store_true', dest="overwrite")
-    parser.add_option("--input", action='store', dest="input_file",
+    parser.add_option("--input", action='store', dest="input_file", # clust_is_black_when generated in previous script
                       default = None,
                       type='str', help='input file')
     parser.add_option("--output", action='store', dest="output_folder",
@@ -185,6 +186,7 @@ if __name__ == "__main__":
 
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
+    # here we need to load both ground truth and black when arrays
     # black_cluster: index-cluster, bool value-true if cluster is black
     clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr")
     # cluster is black when
@@ -237,7 +239,7 @@ if __name__ == "__main__":
 
     blocks_range = chain.range(start_date, end_date)
 
-    # set of black users
+    # set of black users 
     # node type should change to str because in graphs nodes ids are str
     # clust_is_black_ground_set = set([str(i) for i in range(len(clust_is_black_ground)) if clust_is_black_ground[i]])
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
@@ -248,13 +250,16 @@ if __name__ == "__main__":
 
     print("[CALC] starts black bitcoin diffusion...")
 
+    # the part below is unfinished and might not be correct
     no_black_clusters_cumulative = 0
     # RUN ON ALL BLOCKS
     for b in blocks_range:
         _ = {}
+        # create empty temp sets
         old_black_nodes = set([])
         new_black_nodes = set([])
-
+        
+        # initialize all the feature variables
         black_old2new_no_links = 0
         black_old2old_no_links = 0
         white2black_no_links = 0
@@ -340,7 +345,7 @@ if __name__ == "__main__":
                         loc_no_old_black_clusters_output += 1
                         # print(loc_no_black_clusters_output)
 
-            # all trxs have been cheked 
+            # all trxs have been cheked, now we have to collect the information 
             # clusters
             loc_no_clusters_input = len(tup_inputs)
             loc_no_clusters_output = len(tup_outputs)
@@ -372,7 +377,7 @@ if __name__ == "__main__":
         no_new_black_clusters = len(new_black_nodes)
         no_black_clusters_cumulative += no_new_black_clusters
 
-        # new
+        # save in a new dictionary 
         _['block'] = b.height
         _['no_old_black_clusters'] = no_old_black_clusters
         _['no_new_black_clusters'] = no_new_black_clusters
@@ -400,6 +405,7 @@ if __name__ == "__main__":
         _['no_white_trxs'] = no_white_trxs
         _['total_trxs'] = total_trxs
 
+        # save in csv
         csv_fout.writerow(_)
 
     chrono.print(message="took", tic="last")
