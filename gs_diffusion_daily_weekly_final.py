@@ -5,12 +5,12 @@
 #     - `{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_data/` clustering data
 #     - `{DIR_PARSED}/{options.currency}.cfg` blockchain data
 # outputs:
-#     * zarr file: `` index is cluster id, value is int block when the cluster became black which can also represent time.
+#     * zarr file: `cluster_is_black_when_block.zarr` index is cluster id, value is int block when the cluster became black which can also represent time.
 
 # here in this script we replicate the diffusion and from ground-truth we see how users turn black block by block
 
 import blocksci
-from decimal import Decimal, getcontext
+from decimal import Decimal
 import sys, os, os.path, socket
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
@@ -141,11 +141,16 @@ if __name__ == "__main__":
     chrono = SimpleChrono()
 
     # Load chain and initialize address mapper
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old.cfg")
+    
+    if socket.gethostname() == 'abacus-1':
+        chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old_abacus-1.cfg")
+    elif socket.gethostname() == 'consensus-2':
+        chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_old.cfg")
     am = AddressMapper(chain)
     am.load_clusters(f"{options.cluster_data_folder}")
 
     # black_cluster: index-cluster, bool value-true if cluster is black. We use the same file we got from ub_ground_truth.py file
+    print(f"loading clust_is_black_ground from:{options.black_data_folder}/cluster_is_black_ground_truth.zarr")
     clust_is_black_ground = zarr.load(f"{options.black_data_folder}/cluster_is_black_ground_truth.zarr") 
 
     # PRE-PROCESSING
@@ -169,7 +174,7 @@ if __name__ == "__main__":
     clust_is_black_ground_set = set(compress(range(len(clust_is_black_ground)), clust_is_black_ground))
 
     if options.start_date != None:
-        savedDataLocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/weekly/"
+        savedDataLocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/weekly/"
 
         current_assets_zarr = zarr.load(savedDataLocation + f'current_assets/current_assets_{start_date.strftime("%Y-%m-%d")}.zarr')
         current_assets = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"])))
@@ -294,15 +299,15 @@ if __name__ == "__main__":
 
 
                     # Unusual Values monitoring
-                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/unusual_values.txt", "a") as f:
-                        if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
-                            print(f'error value of dark_ratio at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_ratio[cluster]}', file=f)
+                    # with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/unusual_values.txt", "a") as f:
+                    #     if dark_ratio[cluster] < 0 or dark_ratio[cluster] > 1 or math.isnan(dark_ratio[cluster]) or math.isinf(dark_ratio[cluster]):
+                    #         print(f'error value of dark_ratio at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_ratio[cluster]}', file=f)
                         
-                        if current_assets[cluster] < 0 or  math.isnan(current_assets[cluster]) or math.isinf(current_assets[cluster]):
-                            print(f'error value of current_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={current_assets[cluster]}', file=f)
+                    #     if current_assets[cluster] < 0 or  math.isnan(current_assets[cluster]) or math.isinf(current_assets[cluster]):
+                    #         print(f'error value of current_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={current_assets[cluster]}', file=f)
                         
-                        if dark_assets[cluster] < 0 or  math.isnan(dark_assets[cluster]) or math.isinf(dark_assets[cluster]):
-                            print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
+                    #     if dark_assets[cluster] < 0 or  math.isnan(dark_assets[cluster]) or math.isinf(dark_assets[cluster]):
+                    #         print(f'error value of dark_assets at week={week}, day={day}, block={block.height}, cluster={cluster}, value={dark_assets[cluster]}', file=f)
                             
 
                 # Block level progress monitoring monitoring
@@ -316,7 +321,8 @@ if __name__ == "__main__":
             dark_assets_index, dark_assets_values = zip(*dark_assets.items())
             dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
 
-            savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/daily/"
+            # savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/daily/"
+            savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/daily/"
             zarr.save(savelocation + f'current_assets/current_assets_{day.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
             zarr.save(savelocation + f'dark_assets/dark_assets_{day.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)
             zarr.save(savelocation + f'dark_ratio/dark_ratio_{day.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
@@ -328,7 +334,7 @@ if __name__ == "__main__":
         dark_assets_index, dark_assets_values = zip(*dark_assets.items())
         dark_ratio_index, dark_ratio_values = zip(*dark_ratio.items())
 
-        savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_data_v3/weekly/"
+        savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/weekly/"
         zarr.save(savelocation + f'current_assets/current_assets_{week.strftime("%Y-%m-%d")}.zarr', current_assets_values=current_assets_values, current_assets_index=current_assets_index)
         zarr.save(savelocation + f'dark_ratio/dark_ratio_{week.strftime("%Y-%m-%d")}.zarr', dark_ratio_values=dark_ratio_values, dark_ratio_index=dark_ratio_index)
         zarr.save(savelocation + f'dark_assets/dark_assets_{week.strftime("%Y-%m-%d")}.zarr', dark_assets_values=dark_assets_values, dark_assets_index=dark_assets_index)

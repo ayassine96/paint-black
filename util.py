@@ -61,7 +61,8 @@ if socket.gethostname() == 'abacus':
     DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
 elif socket.gethostname() == 'abacus-1':
     DIR_BCHAIN="/mnt/hdd_data/blockchain_data/"
-    DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
+    DIR_PARSED="/srv/consensus-2/blockchain_parsed" # updated location
+    # DIR_PARSED="/mnt/hdd_data/blockchain_parsed/"
 elif socket.gethostname() == 'consensus-2':
     DIR_BCHAIN="/local/scratch/exported/blockchain_parsed"
     DIR_PARSED="/export/consensus-2/blockchain_parsed" # updated location
