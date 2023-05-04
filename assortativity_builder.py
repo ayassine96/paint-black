@@ -10,6 +10,9 @@ from collections import defaultdict
 import math
 import sys, os, os.path, socket
 import logging
+import json
+import matplotlib.pyplot as plt
+import matplotlib.dates
 from util import SYMBOLS, DIR_PARSED, SimpleChrono
 
 
@@ -52,47 +55,6 @@ def parse_command_line():
 
 
     return options, args
-
-    
-def build_current_dictionary(asset):
-
-    current_assets_zarr = zarr.load(asset)
-    
-    current_assets_dict = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"])))
-        
-    return current_assets_dict
-        
-        
-def build_dark_dictionary(ratio):
-
-    dark_ratio_zarr = zarr.load(ratio)
-    
-    dark_ratio_dict = defaultdict(lambda: 0, dict(zip(dark_ratio_zarr["dark_ratio_index"], dark_ratio_zarr["dark_ratio_values"])))
-    
-    return dark_ratio_dict
-
-def load_dictionaries(date, heur, freq):
-
-    if freq == "day":
-        freq = "daily"
-    elif freq == "week":
-        freq = "weekly"
-
-    current_assets_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/current_assets/"
-        
-    dark_ratio_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/dark_ratio/"
-
-    current_assets_file = f"{current_assets_path}current_assets_{date}.zarr"
-    
-    dark_ratio_file = f"{dark_ratio_path}dark_ratio_{date}.zarr"
-    
-    if os.path.exists(current_assets_file):
-        current_assets_dict = build_current_dictionary(current_assets_file)
-    
-    if os.path.exists(dark_ratio_file):
-        dark_ratios_dict = build_dark_dictionary(dark_ratio_file)
-    
-    return current_assets_dict,dark_ratios_dict
                     
                         
 def daterange(date1, date2, by=1):
@@ -100,7 +62,8 @@ def daterange(date1, date2, by=1):
 
 def build_network_with_assortativity(date):
 
-    savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2_assortativity/{switcherback[options.frequency]}"
+    #fix save location for abacus-1
+    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
     unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     start_time = datetime.now()
@@ -108,10 +71,18 @@ def build_network_with_assortativity(date):
     chrono.add_tic("net")
     g = nx.DiGraph()
 
-    networks_path = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2_final/{switcherback[options.frequency]}"
+    networks_path = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
     unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+
+    if not os.path.exists(unit_graph_file):
+        logging.info(f'assortativity building of the date:{date} is unsuccesful since original network does not exist')
+        return -2.0
     
-    g = nx.read_graphml(unit_graph_file)
+    try:
+        g = nx.read_graphml(unit_graph_file)
+    except OSError:
+        logging.info(f'assortativity building of the date:{date} is unsuccesful because of OSError')
+        return -2.0
 
     DR_color_assortativity = nx.attribute_assortativity_coefficient(g, "color")
         
@@ -126,7 +97,7 @@ def build_network_with_assortativity(date):
 
     tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
-    return "Done"
+    return DR_color_assortativity
 
      
 
@@ -135,10 +106,9 @@ if __name__ == "__main__":
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/logfile_networks_builder_final_heur_{options.heuristic}_{switcherback[options.frequency]}/logfile_assortativity_v2", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
-
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/assortativity_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
-    chain       = blocksci.Blockchain("/local/scratch/exported/blockchain_parsed/bitcoin_old.cfg")
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
     chrono.print(message="init")
 
@@ -158,9 +128,35 @@ if __name__ == "__main__":
     datelist = daterange(start_date, end_date, by=options.frequency)
     tqdm_bar = tqdm(datelist, desc="processed files")
 
+    x_values = []
+    y_values_assortativity = []
+
     for timeunit in tqdm_bar:
-        build_network_with_assortativity(timeunit)
+
+        # Run assortativity builder and store result
+        assort_result = build_network_with_assortativity(timeunit)
+
+        x_values.append(timeunit.strftime('%Y-%m-%d'))
+        y_values_assortativity.append(float(assort_result))
+
+        tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
         # print(timeunit)
+    
+    with open(f'jsonResults_v3/h{options.heuristic}/assortativity_2009-01-03_{end_date}.json', 'w') as f:
+        results_dict = dict(zip(x_values, y_values_assortativity))
+        save_json = json.dumps(results_dict)
+        f.write(save_json)
+    
+    dates = matplotlib.dates.date2num(x_values)
+    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    matplotlib.pyplot.style.use('seaborn-darkgrid')
+    matplotlib.pyplot.legend(loc="upper left")
+    matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
+    matplotlib.pyplot.legend()
+    matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
+    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/AssortativityPlot.png', dpi=100)
+    plt.close(fig)
+    
                       
 
     print('Process terminated, graphs and attributes created.')

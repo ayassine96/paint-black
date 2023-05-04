@@ -44,6 +44,8 @@ def parse_command_line():
                                        default = None, help = "ending date for network creation in YYYY-MM-DD format")
     parser.add_option("--freq", action="store", dest="frequency",
                        default = "day", help = "time aggregation of networks - choose between day, week, 2weeks, 4weeks")
+    parser.add_option("--block", action="store", dest="block",
+                                       default = None, help = "ending block for network for specific week to restart")
 
     switcher = {"day":1, "week":7, "2weeks":14, "4weeks":28}
 
@@ -177,24 +179,26 @@ if __name__ == "__main__":
         savedDataLocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/weekly/"
 
         current_assets_zarr = zarr.load(savedDataLocation + f'current_assets/current_assets_{start_date.strftime("%Y-%m-%d")}.zarr')
-        current_assets = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"])))
+        current_assets = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"].astype(float) )))
 
         dark_assets_zarr = zarr.load(savedDataLocation + f'dark_assets/dark_assets_{start_date.strftime("%Y-%m-%d")}.zarr')
-        dark_assets = defaultdict(lambda: 0, dict(zip(dark_assets_zarr["dark_assets_index"], dark_assets_zarr["dark_assets_values"])))
+        dark_assets = defaultdict(lambda: 0, dict(zip(dark_assets_zarr["dark_assets_index"], dark_assets_zarr["dark_assets_values"].astype(float))))
 
         dark_ratio_zarr = zarr.load(savedDataLocation + f'dark_ratio/dark_ratio_{start_date.strftime("%Y-%m-%d")}.zarr')
         dark_ratio = defaultdict(lambda: 0, dict(zip(dark_ratio_zarr["dark_ratio_index"], dark_ratio_zarr["dark_ratio_values"])))
+
+        # used to track blocks to ensure non are repeated. to restart the simulation find out from logs and set last seen block from previous week 
+        currentBlock = int(options.block)
     else:
         current_assets = defaultdict(lambda: 0)
         dark_assets = defaultdict(lambda: 0)
         dark_ratio = defaultdict(lambda: 0.0)
+        # used to track blocks to ensure non are repeated. to restart the simulation find out from logs and set last seen block from previous week 
+        currentBlock = 0    
 
 
     chrono.print(message="init")
     print(f"[CALC] Starting the grayscale diffusion for all the blockchain...")
-
-    # used to track blocks to ensure non are repeated. to restart the simulation find out from logs and set last seen block from previous week 
-    currentBlock = 0 
 
     for week in tqdm_bar:
         chrono.add_tic("net")
@@ -221,6 +225,8 @@ if __name__ == "__main__":
             for block in dayblocks:
 
                 if block.height < currentBlock:
+                    with open(f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/block_progress.txt", "a") as f:
+                        print(f'skipped block={block.height} where currentBlock={currentBlock} , day:{day} , week:{week} , time:{datetime.now()}', file=f)
                     continue
                 
                 #______________________________TRX level_____________________________________

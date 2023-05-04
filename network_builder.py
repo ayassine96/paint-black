@@ -55,15 +55,23 @@ def parse_command_line():
 
             
     
-def build_current_dictionary(asset):
+def build_CA_dictionary(asset):
 
     current_assets_zarr = zarr.load(asset)
     
     current_assets_dict = defaultdict(lambda: 0, dict(zip(current_assets_zarr["current_assets_index"], current_assets_zarr["current_assets_values"])))
         
     return current_assets_dict
+
+def build_DA_dictionary(asset):
+
+    dark_assets_zarr = zarr.load(asset)
+    
+    dark_assets_dict = defaultdict(lambda: 0, dict(zip(dark_assets_zarr["dark_assets_index"], dark_assets_zarr["dark_assets_values"])))
+        
+    return dark_assets_dict
              
-def build_dark_dictionary(ratio):
+def build_DR_dictionary(ratio):
 
     dark_ratio_zarr = zarr.load(ratio)
     
@@ -73,26 +81,30 @@ def build_dark_dictionary(ratio):
 
 def load_dictionaries(date, heur, freq):
 
+    
     if freq == "day":
         freq = "daily"
     elif freq == "week":
         freq = "weekly"
 
-    current_assets_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/current_assets/"
-        
-    dark_ratio_path = f"/home/user/yassine/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{heur}_data_v2/{freq}/dark_ratio/"
+    loadlocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{heur}_data_v3/{freq}"
 
-    current_assets_file = f"{current_assets_path}current_assets_{date}.zarr"
+    current_assets_file = f"{loadlocation}/current_assets/current_assets_{date}.zarr"
+
+    dark_assets_file = f"{loadlocation}/dark_assets/dark_assets_{date}.zarr"
     
-    dark_ratio_file = f"{dark_ratio_path}dark_ratio_{date}.zarr"
+    dark_ratio_file = f"{loadlocation}/dark_ratio/dark_ratio_{date}.zarr"
     
     if os.path.exists(current_assets_file):
-        current_assets_dict = build_current_dictionary(current_assets_file)
+        current_assets_dict = build_CA_dictionary(current_assets_file)
+
+    if os.path.exists(dark_assets_file):
+        dark_assets_dict = build_DA_dictionary(dark_assets_file)
     
     if os.path.exists(dark_ratio_file):
-        dark_ratios_dict = build_dark_dictionary(dark_ratio_file)
+        dark_ratios_dict = build_DR_dictionary(dark_ratio_file)
     
-    return current_assets_dict,dark_ratios_dict
+    return current_assets_dict,dark_ratios_dict,dark_assets_dict
                     
                 
                 
@@ -101,7 +113,9 @@ def daterange(date1, date2, by=1):
 
 def build_network_with_attributes(date):
 
-    savelocation = f"/local/scratch/exported/blockchain_parsed/bitcoin_darknet/gs_group/grayscale_op_ali/final/heur_{options.heuristic}_networks_v2_final/{switcherback[options.frequency]}"
+    switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
+
+    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
     unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     if os.path.exists(unitsavelocation):
@@ -115,24 +129,32 @@ def build_network_with_attributes(date):
     chrono.add_tic("net")
     g = nx.DiGraph()
 
-    networks_path = f"/local/scratch/exported/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
+    networks_path = f"/srv/consensus-2/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
     unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+
+    if not os.path.exists(unit_graph_file):
+        logging.info(f'building the date:{date} is unsuccesful since original network does not exist')
+        return "Doesnt exists"
     
     g = nx.read_graphml(unit_graph_file)
 
-    current_assets_dict_full, dark_ratios_dict_full = load_dictionaries(date, options.heuristic, switcherback[options.frequency])
+    current_assets_dict_full, dark_ratios_dict_full, dark_assets_dict_full = load_dictionaries(date, options.heuristic, switcherback[options.frequency])
 
     list_of_nodes = list(g.nodes)
 
     current_assets_dict_filtered = { k: current_assets_dict_full[int(k)] for k in list_of_nodes }
     dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
+    dark_assets_dict_filtered = { k: dark_assets_dict_full[int(k)] for k in list_of_nodes }
 
     del current_assets_dict_full
     del dark_ratios_dict_full
+    del dark_assets_dict_full
 
     for node in g.nodes():
         
         nx.set_node_attributes(g, {node:current_assets_dict_filtered[node]}, 'current_assets')
+
+        nx.set_node_attributes(g, {node:dark_assets_dict_filtered[node]}, 'dark_assets')
         
         nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
 
@@ -151,6 +173,7 @@ def build_network_with_attributes(date):
 
     del current_assets_dict_filtered
     del dark_ratios_dict_filtered
+    del dark_assets_dict_filtered
     gc.collect()
 
     logging.info(f'Building for the date:{date} has finished with t={datetime.now() - start_time} finished')
@@ -168,10 +191,9 @@ if __name__ == "__main__":
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/logfile_networks_builder_final_heur_{options.heuristic}_{switcherback[options.frequency]}/logfile_v2", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
-
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
-    chain       = blocksci.Blockchain("/local/scratch/exported/blockchain_parsed/bitcoin_old.cfg")
+    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
     chrono.print(message="init")
 
@@ -186,7 +208,7 @@ if __name__ == "__main__":
         end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
 
     print(f'start_date is set as: {start_date}')
-    print(f'end_date is set as: {end_date}')    
+    print(f'end_date is set as: {end_date}')
     
     datelist = daterange(start_date, end_date, by=options.frequency)
     tqdm_bar = tqdm(datelist, desc="processed files")
