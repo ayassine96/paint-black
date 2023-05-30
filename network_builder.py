@@ -11,6 +11,10 @@ import sys, os, os.path, socket
 import logging
 import gc
 from util import SYMBOLS, DIR_PARSED, SimpleChrono
+import math
+import matplotlib.pyplot as plt
+import matplotlib.dates
+import json
 
 
 def parse_command_line():
@@ -111,34 +115,43 @@ def load_dictionaries(date, heur, freq):
 def daterange(date1, date2, by=1):
     return [  date1 + timedelta(n) for n in range(0, int((date2 - date1).days)+1, by) ]         
 
-def build_network_with_attributes(date):
+def build_network_with_attributes(current_date):
+
+    previous_date = current_date - timedelta(options.frequency)
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
-    unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_shifted/{switcherback[options.frequency]}"
+    unitsavelocation = f"{savelocation}/{current_date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     if os.path.exists(unitsavelocation):
-        logging.info(f'building the date:{date} has started but the file exists so it will shutdown')
+        logging.info(f'building the date:{current_date} has started but the file exists so it will shutdown')
         return "Already exists"
     
-    logging.info(f'Building attributes for the date:{date} has started')
+    logging.info(f'Building attributes for the date:{current_date} has started')
 
     start_time = datetime.now()
     
     chrono.add_tic("net")
     g = nx.DiGraph()
 
+    # Load current day network (nodes+edges)
     networks_path = f"/srv/consensus-2/blockchain_parsed/bitcoin/heur_{options.heuristic}_networks_{switcherback[options.frequency]}"
-    unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+    unit_graph_file = f"{networks_path}/{current_date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     if not os.path.exists(unit_graph_file):
-        logging.info(f'building the date:{date} is unsuccesful since original network does not exist')
-        return "Doesnt exists"
+        logging.info(f'building the date:{current_date} is unsuccesful since original network does not exist')
+        return -2.0
     
-    g = nx.read_graphml(unit_graph_file)
+    try:
+        g = nx.read_graphml(unit_graph_file)
+    except OSError:
+        logging.info(f'assortativity building of the date:{current_date} is unsuccesful because of OSError')
+        return -2.0
 
-    current_assets_dict_full, dark_ratios_dict_full, dark_assets_dict_full = load_dictionaries(date, options.heuristic, switcherback[options.frequency])
+    current_assets_dict_full, dark_ratios_dict_full, dark_assets_dict_full = load_dictionaries(previous_date, options.heuristic, switcherback[options.frequency])
+
+    current_assets_dict_full_new, dark_ratios_dict_full_new, dark_assets_dict_full_new = load_dictionaries(current_date, options.heuristic, switcherback[options.frequency])
 
     list_of_nodes = list(g.nodes)
 
@@ -146,43 +159,85 @@ def build_network_with_attributes(date):
     dark_ratios_dict_filtered = { k: dark_ratios_dict_full[int(k)] for k in list_of_nodes }
     dark_assets_dict_filtered = { k: dark_assets_dict_full[int(k)] for k in list_of_nodes }
 
+    # current_assets_dict_filtered_new = { k: current_assets_dict_full_new[int(k)] for k in list_of_nodes }
+    dark_ratios_dict_filtered_new = { k: dark_ratios_dict_full_new[int(k)] for k in list_of_nodes }
+    # dark_assets_dict_filtered_new = { k: dark_assets_dict_full_new[int(k)] for k in list_of_nodes }
+
     del current_assets_dict_full
     del dark_ratios_dict_full
     del dark_assets_dict_full
+    del current_assets_dict_full_new
+    del dark_ratios_dict_full_new
+    del dark_assets_dict_full_new
 
     for node in g.nodes():
-        
-        nx.set_node_attributes(g, {node:current_assets_dict_filtered[node]}, 'current_assets')
 
-        nx.set_node_attributes(g, {node:dark_assets_dict_filtered[node]}, 'dark_assets')
+        if current_assets_dict_filtered[node] > 0:
         
-        nx.set_node_attributes(g, {node:dark_ratios_dict_filtered[node]}, 'dark_ratio')
+            nx.set_node_attributes(g, {node:int(current_assets_dict_filtered[node])}, 'current_assets')
 
-        if dark_ratios_dict_filtered[node] == 1.0:
-            nx.set_node_attributes(g, {node:"black"}, 'color')
-        elif 0.75 <= dark_ratios_dict_filtered[node] < 1.0 :
-            nx.set_node_attributes(g, {node:"dark_grey"}, 'color')
-        elif 0.5 <= dark_ratios_dict_filtered[node] < 0.75 :
-            nx.set_node_attributes(g, {node:"grey"}, 'color')
-        elif 0.25 <= dark_ratios_dict_filtered[node] < 0.5 :
-            nx.set_node_attributes(g, {node:"light_grey"}, 'color')
-        elif 0 < dark_ratios_dict_filtered[node] < 0.25 :
-            nx.set_node_attributes(g, {node:"greyish_white"}, 'color')
-        elif dark_ratios_dict_filtered[node] == 0.0 :
-            nx.set_node_attributes(g, {node:"white"}, 'color')
+            nx.set_node_attributes(g, {node:int(dark_assets_dict_filtered[node])}, 'dark_assets')
+            
+            nx.set_node_attributes(g, {node:float(dark_ratios_dict_filtered[node])}, 'dark_ratio')
+
+            if dark_ratios_dict_filtered[node] == 1.0:
+                nx.set_node_attributes(g, {node:"black"}, 'color')
+            elif 0.75 <= dark_ratios_dict_filtered[node] < 1.0 :
+                nx.set_node_attributes(g, {node:"dark_grey"}, 'color')
+            elif 0.5 <= dark_ratios_dict_filtered[node] < 0.75 :
+                nx.set_node_attributes(g, {node:"grey"}, 'color')
+            elif 0.25 <= dark_ratios_dict_filtered[node] < 0.5 :
+                nx.set_node_attributes(g, {node:"light_grey"}, 'color')
+            elif 0 < dark_ratios_dict_filtered[node] < 0.25 :
+                nx.set_node_attributes(g, {node:"greyish_white"}, 'color')
+            elif dark_ratios_dict_filtered[node] == 0.0 :
+                nx.set_node_attributes(g, {node:"white"}, 'color')  
+        
+        elif current_assets_dict_filtered[node] == 0:
+
+            average_DR = (dark_ratios_dict_filtered_new[node] + dark_ratios_dict_filtered[node]) / 2
+            
+            nx.set_node_attributes(g, {node:float(average_DR)}, 'dark_ratio')
+
+            if average_DR == 1.0:
+                nx.set_node_attributes(g, {node:"black"}, 'color')
+            elif 0.75 <= average_DR < 1.0 :
+                nx.set_node_attributes(g, {node:"dark_grey"}, 'color')
+            elif 0.5 <= average_DR < 0.75 :
+                nx.set_node_attributes(g, {node:"grey"}, 'color')
+            elif 0.25 <= average_DR < 0.5 :
+                nx.set_node_attributes(g, {node:"light_grey"}, 'color')
+            elif 0 < average_DR < 0.25 :
+                nx.set_node_attributes(g, {node:"greyish_white"}, 'color')
+            elif average_DR == 0.0 :
+                nx.set_node_attributes(g, {node:"white"}, 'color')
+        else:
+            continue
 
     del current_assets_dict_filtered
     del dark_ratios_dict_filtered
     del dark_assets_dict_filtered
+    # del current_assets_dict_filtered_new
+    del dark_ratios_dict_filtered_new
+    # del dark_assets_dict_filtered_new
     gc.collect()
 
-    logging.info(f'Building for the date:{date} has finished with t={datetime.now() - start_time} finished')
+    logging.info(f'Building for the date:{current_date} has finished with t={datetime.now() - start_time} finished')
+
+    DR_color_assortativity = nx.attribute_assortativity_coefficient(g, "color")
+        
+    if math.isnan(DR_color_assortativity):
+        DR_color_assortativity = -2.0
+    
+    g.graph['DR_color_assortativity'] = DR_color_assortativity
 
     nx.write_graphml(g, unitsavelocation)
 
-    tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+    logging.info(f'Computing assortativity for the date:{current_date} has finished with t={datetime.now() - start_time} finished')
 
-    return "Done"
+    tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{current_date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+
+    return DR_color_assortativity
 
 
 
@@ -191,7 +246,7 @@ if __name__ == "__main__":
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/shifted_networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
@@ -213,9 +268,33 @@ if __name__ == "__main__":
     datelist = daterange(start_date, end_date, by=options.frequency)
     tqdm_bar = tqdm(datelist, desc="processed files")
 
+    x_values = []
+    y_values_assortativity = []
+
     for timeunit in tqdm_bar:
-        build_network_with_attributes(timeunit)
-                      
+
+        assort_result = build_network_with_attributes(timeunit)
+
+        x_values.append(timeunit.strftime('%Y-%m-%d'))
+        y_values_assortativity.append(float(assort_result))
+
+        tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+
+    with open(f'jsonResults_v3/h{options.heuristic}/NEW_assortativity_2009-01-03_{end_date}.json', 'w') as f:
+        results_dict = dict(zip(x_values, y_values_assortativity))
+        save_json = json.dumps(results_dict)
+        f.write(save_json)
+    
+    dates = matplotlib.dates.date2num(x_values)
+    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    matplotlib.pyplot.style.use('seaborn-darkgrid')
+    matplotlib.pyplot.legend(loc="upper left")
+    matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
+    matplotlib.pyplot.legend()
+    matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
+    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/NEW_AssortativityPlot.png', dpi=100)
+    plt.close(fig)
+
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")
 

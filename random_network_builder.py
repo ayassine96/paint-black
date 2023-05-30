@@ -15,7 +15,11 @@ from util import SYMBOLS, DIR_PARSED, SimpleChrono
 import random
 import math
 import json
-
+import graph_tool.all as gt
+# from NEMtropy import DirectedGraph
+# from NEMtropy import matrix_generator as mg
+# from NEMtropy.network_functions import build_adjacency_from_edgelist
+#TODO: rewrite so it rabdomizes 10 times ....
 
 def parse_command_line():
     import sys, optparse
@@ -51,8 +55,8 @@ def parse_command_line():
     options.networks_folder = f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_networks_{options.frequency}"
     options.frequency = switcher[options.frequency]
     
-    if not os.path.exists(options.networks_folder):
-        os.mkdir(options.networks_folder)
+    # if not os.path.exists(options.networks_folder):
+    #     os.mkdir(options.networks_folder)
 
 
     return options, args             
@@ -64,7 +68,7 @@ def build_random_network_with_attributes(date):
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_random/{switcherback[options.frequency]}"
+    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_random_directed/{switcherback[options.frequency]}"
     unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     if os.path.exists(unitsavelocation):
@@ -86,55 +90,99 @@ def build_random_network_with_attributes(date):
         return -2.0
     
     try:
-        g = nx.read_graphml(unit_graph_file)
+        g = gt.load_graph(unit_graph_file) 
     except OSError:
         logging.info(f'assortativity building of the date:{date} is unsuccesful because of OSError')
         return -2.0
 
-    # Create a new empty directed graph
-    ER = nx.DiGraph()
+    # Convert the directed graph to an undirected graph
+    ER = gt.GraphView(g, directed=True)
 
-    # Copy over the nodes and their attributes from the original graph to the new graph
-    for node, attrs in g.nodes(data=True):
-        ER.add_node(node, **attrs)
-    
-    # Randomly assign one incoming or outgoing edge to each node
-    while ER.number_of_edges() < g.number_of_edges():
+    # Rewire the undirected graph using the random_rewire() function
+    gt.random_rewire(ER, model="erdos")
 
-        for node in ER.nodes():
-            if ER.number_of_edges() >= g.number_of_edges():
-                break
-
-            if random.random() < 0.5:
-                # Assign outgoing edge
-                neighbors = list(ER.nodes() - {node})
-                v = random.choice(neighbors)
-                ER.add_edge(node, v)
-            else:
-                # Assign incoming edge
-                neighbors = list(ER.nodes() - {node})
-                u = random.choice(neighbors)
-                ER.add_edge(u, node)
+    ER.save(unitsavelocation)
 
     logging.info(f'Building for the date:{date} has finished with t={datetime.now() - start_time} finished:')
-    logging.info(f"     Original graph: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges")
-    logging.info(f"     ER random graph: {ER.number_of_nodes()} nodes, {ER.number_of_edges()} edges")
+    logging.info(f"     Original graph: {g.vertices()} nodes, {g.num_edges()} edges")
+    logging.info(f"     ER random graph: {ER.vertices()} nodes, {ER.num_edges()} edges")
+
+    g = nx.read_graphml(unitsavelocation)
 
     DR_color_assortativity = nx.attribute_assortativity_coefficient(g, "color")
         
     if math.isnan(DR_color_assortativity):
         DR_color_assortativity = -2.0
     
-    ER.graph['DR_color_assortativity'] = DR_color_assortativity
+    g.graph['DR_color_assortativity'] = DR_color_assortativity
 
     logging.info(f'Computing assortativity for the date:{date} has finished with t={datetime.now() - start_time} finished')
 
-    nx.write_graphml(ER, unitsavelocation)
+    nx.write_graphml(g, unitsavelocation)
 
     tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
     return DR_color_assortativity
 
+# def build_random_exp_network_with_attributes(date):
+
+#     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
+
+#     savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_random_gt/{switcherback[options.frequency]}"
+#     unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+
+#     if os.path.exists(unitsavelocation):
+#         logging.info(f'building the date:{date} has started but the file exists so it will shutdown')
+#         return -2.0
+    
+#     logging.info(f'Building attributes for the date:{date} has started')
+
+#     start_time = datetime.now()
+    
+#     chrono.add_tic("net")
+#     g = nx.DiGraph()
+
+#     networks_path = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
+#     unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
+
+#     if not os.path.exists(unit_graph_file):
+#         logging.info(f'building the date:{date} is unsuccesful since original network does not exist')
+#         return -2.0
+    
+#     try:
+#         g = gt.load_graph(unit_graph_file) 
+#     except OSError:
+#         logging.info(f'assortativity building of the date:{date} is unsuccesful because of OSError')
+#         return -2.0
+
+#     # Convert the directed graph to an undirected graph
+#     ER = gt.GraphView(g, directed=False)
+
+#     # Rewire the undirected graph using the random_rewire() function
+#     gt.random_rewire(ER, model="erdos")
+
+#     ER.save(unitsavelocation)
+
+#     logging.info(f'Building for the date:{date} has finished with t={datetime.now() - start_time} finished:')
+#     logging.info(f"     Original graph: {g.vertices()} nodes, {g.num_edges()} edges")
+#     logging.info(f"     ER random graph: {ER.vertices()} nodes, {ER.num_edges()} edges")
+
+#     g = nx.read_graphml(unitsavelocation)
+
+#     DR_color_assortativity = nx.attribute_assortativity_coefficient(g, "color")
+        
+#     if math.isnan(DR_color_assortativity):
+#         DR_color_assortativity = -2.0
+    
+#     g.graph['DR_color_assortativity'] = DR_color_assortativity
+
+#     logging.info(f'Computing assortativity for the date:{date} has finished with t={datetime.now() - start_time} finished')
+
+#     nx.write_graphml(g, unitsavelocation)
+
+#     tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+
+#     return DR_color_assortativity
 
 
 if __name__ == "__main__":   
@@ -142,22 +190,24 @@ if __name__ == "__main__":
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/random_networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/gt_random_networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
+    # chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
     chrono.print(message="init")
 
     chrono.add_tic('proc')
-    if options.start_date == None:
-        start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
-    else:
-        start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
-    if options.end_date == None:
-        end_date = datetime.fromtimestamp(chain.blocks[-1].timestamp).date()
-    else:
-        end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
+    # if options.start_date == None:
+    #     start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
+    # else:
+    #     start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
+    # if options.end_date == None:
+    #     end_date = datetime.fromtimestamp(chain.blocks[-1].timestamp).date()
+    # else:
+    #     end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
 
+    start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
+    end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
     print(f'start_date is set as: {start_date}')
     print(f'end_date is set as: {end_date}')
     
@@ -175,9 +225,9 @@ if __name__ == "__main__":
         x_values.append(timeunit.strftime('%Y-%m-%d'))
         y_values_assortativity.append(float(assort_result))
 
-        tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
+        tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('proc')} sec", refresh=True)
 
-    with open(f'jsonResults_v3/h{options.heuristic}/random/random_assortativity_2009-01-03_{end_date}.json', 'w') as f:
+    with open(f'jsonResults_v3/h{options.heuristic}/random/directed_random_assortativity_2009-01-03_{end_date}.json', 'w') as f:
         results_dict = dict(zip(x_values, y_values_assortativity))
         save_json = json.dumps(results_dict)
         f.write(save_json)
@@ -189,7 +239,7 @@ if __name__ == "__main__":
     matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
     matplotlib.pyplot.legend()
     matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
-    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/Random_AssortativityPlot.png', dpi=100)
+    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/directed_random_assortativityPlot.png', dpi=100)
     plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
