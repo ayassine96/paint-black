@@ -16,6 +16,8 @@ import random
 import math
 import json
 import graph_tool.all as gt
+import operator
+import concurrent.futures
 # from NEMtropy import DirectedGraph
 # from NEMtropy import matrix_generator as mg
 # from NEMtropy.network_functions import build_adjacency_from_edgelist
@@ -157,7 +159,32 @@ def community_modularity_analysis(date):
 
     return real_DR_modularity, real_SBM_modularity, random_DR_modularity, random_SBM_modularity, maximum_modularity, clustering
 
+def process_timeunit(timeunit):
+    # Run randomizer + assortativity builder and store result
+    real_DR_unit, real_SBM_unit, random_DR_unit, random_SBM_unit, maximum_modularity_unit, clustering_unit = community_modularity_analysis(timeunit)
 
+    # Add values to data dictionaries
+    date = timeunit.strftime('%Y-%m-%d')
+    x_values.append(date)
+    x_values.sort()
+
+    for key, value in data_dicts.items():
+        if key == 'clustering':
+            value[date] = float(clustering_unit[0])
+        elif key == 'clustering_std':
+            value[date] = float(clustering_unit[1])
+        else:
+            value[date] = float(eval(key + '_unit'))
+
+    # Save data dictionaries after each process
+    for key, data_dict in data_dicts.items():
+        sorted_data = dict(sorted(data_dict.items(), key=operator.itemgetter(0)))
+        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
+        with open(file_path, 'w') as f:
+            save_json = json.dumps(sorted_data)
+            f.write(save_json)
+
+    return timeunit
 
 if __name__ == "__main__":   
     options, args = parse_command_line()
@@ -181,65 +208,68 @@ if __name__ == "__main__":
     tqdm_bar = tqdm(datelist, desc="processed files")
 
     x_values = []
-    real_DR_total, real_SBM_total, random_DR_total, random_SBM_total, maximum_modularity_total, clustering_total, clustering_std_total = ([] for i in range(7))
+    # real_DR_total, real_SBM_total, random_DR_total, random_SBM_total, maximum_modularity_total, clustering_total, clustering_std_total = ({{}} for i in range(7))
+    data_dicts = {
+    'real_DR': {},
+    'real_SBM': {},
+    'random_DR': {},
+    'random_SBM': {},
+    'maximum_modularity': {},
+    'clustering': {},
+    'clustering_std': {}}
 
-    for timeunit in tqdm_bar:
-
-        # Run randomizer + assortativity builder and store result
-        real_DR_unit, real_SBM_unit, random_DR_unit, random_SBM_unit, maximum_modularity_unit, clustering_unit = community_modularity_analysis(timeunit)
-
-        x_values.append(timeunit.strftime('%Y-%m-%d'))
-
-        real_DR_total.append(float(real_DR_unit))
-        real_SBM_total.append(float(real_SBM_unit))
-        random_DR_total.append(float(random_DR_unit))
-        random_SBM_total.append(float(random_SBM_unit))
-        maximum_modularity_total.append(float(maximum_modularity_unit))
-        clustering_total.append(float(clustering_unit[0]))
-        clustering_std_total.append(float(clustering_unit[1]))
-
-
-        tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('proc')} sec", refresh=True)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/real_DR_modularity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, real_DR_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/real_SBM_modularity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, real_SBM_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/random_DR_modularity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, random_DR_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/random_SBM_modularity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, random_SBM_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/maximum_modularity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, maximum_modularity_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
-
-    with open(f'jsonResults_v3/h{options.heuristic}/community/global_clustering_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, clustering_total))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
     
+    # Create a ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Process timeunits in parallel
+        futures = [executor.submit(process_timeunit, timeunit) for timeunit in tqdm_bar]
+
+        # Wait for all futures to complete
+        concurrent.futures.wait(futures)
+
+    # for timeunit in tqdm_bar:
+
+    #     # Run randomizer + assortativity builder and store result
+    #     real_DR_unit, real_SBM_unit, random_DR_unit, random_SBM_unit, maximum_modularity_unit, clustering_unit = community_modularity_analysis(timeunit)
+
+    #     # Add values to data dictionaries
+    #     date = timeunit.strftime('%Y-%m-%d')
+    #     x_values.append(date)
+        
+    #     for key, value in data_dicts.items():
+    #         if key == 'clustering':
+    #             value[date] = float(clustering_unit[0])
+    #         elif key == 'clustering_std':
+    #             value[date] = float(clustering_unit[1])
+    #         else:
+    #             value[date] = float(eval(key + '_unit'))
+            
+        
+    #     for key, data_dict in data_dicts.items():
+    #         file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
+    #         with open(file_path, 'w') as f:
+    #             save_json = json.dumps(data_dict)
+    #             f.write(save_json)
+
+
+    #     tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('proc')} sec", refresh=True)
+    
+    # Load the data from the saved JSON files
+    # data = {}
+    # for key in data_dicts.keys():
+    #     file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
+    #     with open(file_path, 'r') as f:
+    #         data[key] = json.load(f)
+
     dates = matplotlib.dates.date2num(x_values)
     fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
     matplotlib.pyplot.style.use('seaborn-darkgrid')
     matplotlib.pyplot.legend(loc="upper left")
-    matplotlib.pyplot.plot_date(dates, real_DR_total, 'k-', color='black', linewidth=4, label="real_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, real_SBM_total, 'k-', color='dimgray', linewidth=4, label="real_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, random_DR_total, 'k-', color='gray', linewidth=4, label="random_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, random_SBM_total, 'k-', color='lightgray', linewidth=4, label="random_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, maximum_modularity_total, 'k-', color='whitesmoke', linewidth=4, label="maximum_modularity")
+    matplotlib.pyplot.plot_date(dates, data_dicts["real_DR"].values(), 'k-', color='black', linewidth=4, label="real_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, data_dicts["real_SBM"].values(), 'k-', color='dimgray', linewidth=4, label="real_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, data_dicts["random_DR"].values(), 'k-', color='gray', linewidth=4, label="random_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, data_dicts["random_SBM"].values(), 'k-', color='lightgray', linewidth=4, label="random_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, data_dicts["maximum_modularity"].values(), 'k-', color='whitesmoke', linewidth=4, label="maximum_modularity")
     matplotlib.pyplot.legend()
     matplotlib.pyplot.gca().set_title("Modularity Scores")
     matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)
