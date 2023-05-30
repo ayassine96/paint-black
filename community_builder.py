@@ -107,7 +107,7 @@ def community_modularity_analysis(date):
     block_property = g.new_vertex_property("int")
     for vertex in g.vertices():
         block_property[vertex] = blocks[vertex]
-        print(f'vertex:{vertex} , block {blocks[vertex]}')
+        # print(f'vertex:{vertex} , block {blocks[vertex]}')
 
     # Add the block_property as a vertex attribute
     g.vp["block"] = block_property
@@ -208,7 +208,6 @@ if __name__ == "__main__":
     tqdm_bar = tqdm(datelist, desc="processed files")
 
     x_values = []
-    # real_DR_total, real_SBM_total, random_DR_total, random_SBM_total, maximum_modularity_total, clustering_total, clustering_std_total = ({{}} for i in range(7))
     data_dicts = {
     'real_DR': {},
     'real_SBM': {},
@@ -218,58 +217,41 @@ if __name__ == "__main__":
     'clustering': {},
     'clustering_std': {}}
 
-    
     # Create a ThreadPoolExecutor
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Process timeunits in parallel
-        futures = [executor.submit(process_timeunit, timeunit) for timeunit in tqdm_bar]
+    with tqdm(total=len(datelist)) as progress:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Define a helper function to update the progress bar
+            def update_progress(future):
+                progress.update()
+                progress.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('proc')} sec", refresh=True)
 
-        # Wait for all futures to complete
-        concurrent.futures.wait(futures)
+            # Process timeunits in parallel
+            futures = []
+            for timeunit in datelist:
+                future = executor.submit(process_timeunit, timeunit)
+                future.add_done_callback(update_progress)
+                futures.append(future)
 
-    # for timeunit in tqdm_bar:
-
-    #     # Run randomizer + assortativity builder and store result
-    #     real_DR_unit, real_SBM_unit, random_DR_unit, random_SBM_unit, maximum_modularity_unit, clustering_unit = community_modularity_analysis(timeunit)
-
-    #     # Add values to data dictionaries
-    #     date = timeunit.strftime('%Y-%m-%d')
-    #     x_values.append(date)
-        
-    #     for key, value in data_dicts.items():
-    #         if key == 'clustering':
-    #             value[date] = float(clustering_unit[0])
-    #         elif key == 'clustering_std':
-    #             value[date] = float(clustering_unit[1])
-    #         else:
-    #             value[date] = float(eval(key + '_unit'))
-            
-        
-    #     for key, data_dict in data_dicts.items():
-    #         file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
-    #         with open(file_path, 'w') as f:
-    #             save_json = json.dumps(data_dict)
-    #             f.write(save_json)
-
-
-    #     tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('proc')} sec", refresh=True)
+            # Wait for all futures to complete
+            concurrent.futures.wait(futures)
     
     # Load the data from the saved JSON files
-    # data = {}
-    # for key in data_dicts.keys():
-    #     file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
-    #     with open(file_path, 'r') as f:
-    #         data[key] = json.load(f)
+    data = {}
+    for key in data_dicts.keys():
+        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
+        with open(file_path, 'r') as f:
+            data[key] = json.load(f)
 
     dates = matplotlib.dates.date2num(x_values)
     fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
     matplotlib.pyplot.style.use('seaborn-darkgrid')
     matplotlib.pyplot.legend(loc="upper left")
-    matplotlib.pyplot.plot_date(dates, data_dicts["real_DR"].values(), 'k-', color='black', linewidth=4, label="real_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, data_dicts["real_SBM"].values(), 'k-', color='dimgray', linewidth=4, label="real_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, data_dicts["random_DR"].values(), 'k-', color='gray', linewidth=4, label="random_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, data_dicts["random_SBM"].values(), 'k-', color='lightgray', linewidth=4, label="random_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, data_dicts["maximum_modularity"].values(), 'k-', color='whitesmoke', linewidth=4, label="maximum_modularity")
+    # Plot the data from the loaded JSON files
+    matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
     matplotlib.pyplot.legend()
     matplotlib.pyplot.gca().set_title("Modularity Scores")
     matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)

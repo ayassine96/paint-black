@@ -2,6 +2,7 @@ uniform_black/
 relevant_csv_files/
 logfiles/
 graphs/
+walletexplorer_DNM/
 .ipynb_checkpoints
 __pycache__
 random_pdfs/celegans-hsbm-fit_NEw.pdf
