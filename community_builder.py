@@ -83,7 +83,7 @@ def community_modularity_analysis(date):
     
     chrono.add_tic("net")
 
-    networks_path = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full/{switcherback[options.frequency]}"
+    networks_path = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_shifted_community/{switcherback[options.frequency]}"
     unit_graph_file = f"{networks_path}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     if not os.path.exists(unit_graph_file):
@@ -139,7 +139,7 @@ def community_modularity_analysis(date):
     state_maximal = gt.minimize_blockmodel_dl(g, state=gt.ModularityState)
     maximum_modularity = state_maximal.modularity()
 
-    # calculate clusterring
+    # # calculate clusterring
     clustering = gt.global_clustering(g, weight=g.ep["value"])
 
     g.gp["real_DR_modularity"] = g.new_graph_property("float", real_DR_modularity)
@@ -157,7 +157,7 @@ def community_modularity_analysis(date):
 
     tqdm_bar.set_description(f"{switcherback[options.frequency]} of '{date.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
-    return real_DR_modularity, real_SBM_modularity, random_DR_modularity, random_SBM_modularity, maximum_modularity, clustering
+    return g.gp["real_DR_modularity"], g.gp["real_SBM_modularity"], g.gp["random_DR_modularity"], g.gp["random_SBM_modularity"], g.gp["maximum_modularity"], clustering
 
 def process_timeunit(timeunit):
     # Run randomizer + assortativity builder and store result
@@ -236,26 +236,26 @@ if __name__ == "__main__":
             concurrent.futures.wait(futures)
     
     # Load the data from the saved JSON files
-    data = {}
-    for key in data_dicts.keys():
-        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
-        with open(file_path, 'r') as f:
-            data[key] = json.load(f)
+    # data = {}
+    # for key in data_dicts.keys():
+    #     file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community_new', f'{key}_2009-01-03_{end_date}.json')
+    #     with open(file_path, 'r') as f:
+    #         data[key] = json.load(f)
 
-    dates = matplotlib.dates.date2num(x_values)
-    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
-    matplotlib.pyplot.style.use('seaborn-darkgrid')
-    matplotlib.pyplot.legend(loc="upper left")
-    # Plot the data from the loaded JSON files
-    matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
-    matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
-    matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
-    matplotlib.pyplot.legend()
-    matplotlib.pyplot.gca().set_title("Modularity Scores")
-    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)
-    plt.close(fig)
+    # dates = matplotlib.dates.date2num(x_values)
+    # fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    # matplotlib.pyplot.style.use('seaborn-darkgrid')
+    # matplotlib.pyplot.legend(loc="upper left")
+    # # Plot the data from the loaded JSON files
+    # matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
+    # matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
+    # matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
+    # matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
+    # matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
+    # matplotlib.pyplot.legend()
+    # matplotlib.pyplot.gca().set_title("Modularity Scores")
+    # matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)
+    # plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")

@@ -280,20 +280,20 @@ if __name__ == "__main__":
 
         tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
-    with open(f'jsonResults_v3/h{options.heuristic}/NEW_assortativity_2009-01-03_{end_date}.json', 'w') as f:
-        results_dict = dict(zip(x_values, y_values_assortativity))
-        save_json = json.dumps(results_dict)
-        f.write(save_json)
+    # with open(f'jsonResults_v3/h{options.heuristic}/NEW_assortativity_2009-01-03_{end_date}.json', 'w') as f:
+    #     results_dict = dict(zip(x_values, y_values_assortativity))
+    #     save_json = json.dumps(results_dict)
+    #     f.write(save_json)
     
-    dates = matplotlib.dates.date2num(x_values)
-    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
-    matplotlib.pyplot.style.use('seaborn-darkgrid')
-    matplotlib.pyplot.legend(loc="upper left")
-    matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
-    matplotlib.pyplot.legend()
-    matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
-    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/NEW_AssortativityPlot.png', dpi=100)
-    plt.close(fig)
+    # dates = matplotlib.dates.date2num(x_values)
+    # fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    # matplotlib.pyplot.style.use('seaborn-darkgrid')
+    # matplotlib.pyplot.legend(loc="upper left")
+    # matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
+    # matplotlib.pyplot.legend()
+    # matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
+    # matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/NEW_AssortativityPlot.png', dpi=100)
+    # plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")
