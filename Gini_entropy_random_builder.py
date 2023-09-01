@@ -19,10 +19,6 @@ import graph_tool.all as gt
 import operator
 import concurrent.futures
 from scipy.stats import entropy
-# from NEMtropy import DirectedGraph
-# from NEMtropy import matrix_generator as mg
-# from NEMtropy.network_functions import build_adjacency_from_edgelist
-#TODO: rewrite so it rabdomizes 10 times ....
 
 def parse_command_line():
     import sys, optparse
@@ -46,9 +42,6 @@ def parse_command_line():
     options, args = parser.parse_args()
 
     options.currency = SYMBOLS[options.currency]
-
-#    options.period = [0,-1] if options.period == None else list( map( int, options.period.split(",")))
-#    assert len(options.period) == 2
 
     switcher = {"day":1, "week":7, "2weeks":14, "4weeks":28}
 
@@ -170,9 +163,6 @@ def community_inequality_analysis(date):
             block_current_assets[block] = [current_assets]
         
         # Append the respective properties to the appropriate list for vertex level analysis
-        # vertex_dark_assets[block] = [dark_assets]
-        # vertex_darkness_ratios[block] = [dark_ratio]
-        # vertex_current_assets[block] = [current_assets]
         if v not in vertex_dark_assets:
             vertex_dark_assets[v] = [dark_assets]
             vertex_darkness_ratios[v] = [dark_ratio]
@@ -234,27 +224,6 @@ def process_timeunit(timeunit):
     x_values.append(date)
     x_values.sort()
     
-    # for level, level_data in metrics_dict.items():  # Level can be 'block' or 'vertex'
-    #     for metric, metric_data in level_data.items():  # Metric can be 'dark_assets', 'darkness_ratios', 'current_assets'
-    #         gini_coefficient, entropy, percentile_dict = metric_data
-
-    #         # Construct the key for data_dicts
-    #         key = f"{level}_{metric}_gini"
-    #         if key not in data_dicts:
-    #             data_dicts[key] = {}
-    #         data_dicts[key][date] = gini_coefficient
-
-    #         key = f"{level}_{metric}_entropy"
-    #         if key not in data_dicts:
-    #             data_dicts[key] = {}
-    #         data_dicts[key][date] = entropy
-
-    #         for percentile, value in percentile_dict.items():
-    #             key = f"{level}_{metric}_{percentile}th_percentile"
-    #             if key not in data_dicts:
-    #                 data_dicts[key] = {}
-    #             data_dicts[key][date] = value
-    
     for level, level_data in metrics_dict.items():  # Level can be 'block' or 'vertex'
         for metric, metric_data in level_data.items():  # Metric can be 'dark_assets', 'darkness_ratios', 'current_assets'
             gini_coefficient, entropy, percentile_dict = metric_data
@@ -286,6 +255,8 @@ def process_timeunit(timeunit):
             f.write(save_json)
 
     return timeunit
+
+
 
 if __name__ == "__main__":   
     options, args = parse_command_line()
@@ -328,28 +299,6 @@ if __name__ == "__main__":
 
             # Wait for all futures to complete
             concurrent.futures.wait(futures)
-    
-    # # Load the data from the saved JSON files
-    # data = {}
-    # for key in data_dicts.keys():
-    #     file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community_new', f'{key}_2009-01-03_{end_date}.json')
-    #     with open(file_path, 'r') as f:
-    #         data[key] = json.load(f)
-
-    # dates = matplotlib.dates.date2num(x_values)
-    # fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
-    # matplotlib.pyplot.style.use('seaborn-darkgrid')
-    # matplotlib.pyplot.legend(loc="upper left")
-    # # Plot the data from the loaded JSON files
-    # matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
-    # matplotlib.pyplot.legend()
-    # matplotlib.pyplot.gca().set_title("Modularity Scores")
-    # matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)
-    # plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")

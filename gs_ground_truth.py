@@ -14,7 +14,6 @@ in `{options.output_folder}/heur_{options.heuristic}_data/` # inside this it wil
 """
 
 import blocksci
-
 import sys, os, os.path, socket
 import numpy as np
 import zarr
@@ -115,9 +114,7 @@ if __name__ == "__main__":
     options, args = parse_command_line() # parse the options
     chrono = SimpleChrono() # measure time
 
-    df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv") # TODO: add column names ?
-    #pd.set_option("display.max_rows", None, "display.max_columns", None) TODO: remove
-    #print(df)
+    df = pd.read_csv(f"{DIR_PARSED}/bitcoin_darknet/ground_truth_id.csv")
 
     chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}.cfg") # load the blockchain
     print(f"{DIR_PARSED}/{options.currency}.cfg")

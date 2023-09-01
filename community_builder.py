@@ -18,10 +18,6 @@ import json
 import graph_tool.all as gt
 import operator
 import concurrent.futures
-# from NEMtropy import DirectedGraph
-# from NEMtropy import matrix_generator as mg
-# from NEMtropy.network_functions import build_adjacency_from_edgelist
-#TODO: rewrite so it rabdomizes 10 times ....
 
 def parse_command_line():
     import sys, optparse
@@ -32,9 +28,6 @@ def parse_command_line():
                                               default=None, help="name of the currency")
     parser.add_option("--heur", action='store', dest="heuristic", type='str',
                                                   default=None, help="heuristics to apply")
-    #parser.add_option("--overwrite", action='store_true', dest = "overwrite" )
-#    parser.add_option("--period",  action='store', dest="period",
-#                       default = None , help = "minimum block number to process" )
     parser.add_option("--start", action="store", dest="start_date",
                        default = None, help= "starting date for network creation in YYYY-MM-DD format")
     parser.add_option("--end", action="store", dest="end_date",
@@ -46,9 +39,6 @@ def parse_command_line():
 
     options.currency = SYMBOLS[options.currency]
 
-#    options.period = [0,-1] if options.period == None else list( map( int, options.period.split(",")))
-#    assert len(options.period) == 2
-
     switcher = {"day":1, "week":7, "2weeks":14, "4weeks":28}
 
 
@@ -56,9 +46,6 @@ def parse_command_line():
     options.blocks_folder = f"{DIR_PARSED}/{options.currency}/heur_all_data"
     options.networks_folder = f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}_networks_{options.frequency}"
     options.frequency = switcher[options.frequency]
-    
-    # if not os.path.exists(options.networks_folder):
-    #     os.mkdir(options.networks_folder)
 
 
     return options, args             
@@ -70,7 +57,7 @@ def community_modularity_analysis(date):
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_shifted_community/{switcherback[options.frequency]}"
+    savelocation = f"/srv/abacus-1/bitcoin_darknet/grayscale_op_ali/heur_{options.heuristic}_data_v3/heur_{options.heuristic}_networks_full_shifted_community_v3/{switcherback[options.frequency]}"
     unitsavelocation = f"{savelocation}/{date.strftime('%Y-%m-%d')}.graphml.bz2"
 
     # if os.path.exists(unitsavelocation):
@@ -116,36 +103,48 @@ def community_modularity_analysis(date):
     real_DR_modularity = gt.modularity(g, g.vp["dark_ratio"], weight=g.ep["value"])
     real_SBM_modularity = gt.modularity(g, g.vp["block"], weight=g.ep["value"])
 
-    # Randomize: Rewire the undirected graph using the random_rewire() function
-    gt.random_rewire(ER, model="erdos")
+    # Initialize lists to store random modularity values for 10 randomizations
+    random_DR_modularity_list = []
+    random_SBM_modularity_list = []
 
-    state_random = gt.minimize_blockmodel_dl(ER)
-    blocks_random = state_random.get_blocks()
+    for _ in range(5):  # Add loop for 10 randomizations
+        # Randomize: Rewire the undirected graph using the random_rewire() function
+        gt.random_rewire(ER, model="erdos")
 
-    # Iterate over the vertices and assign the block values as vertex attributes
-    block_property_random = ER.new_vertex_property("int")
-    for vertex in ER.vertices():
-        block_property_random[vertex] = blocks_random[vertex]
-        # print(f'vertex:{vertex} , block {blocks[vertex]}')
+        state_random = gt.minimize_blockmodel_dl(ER)
+        blocks_random = state_random.get_blocks()
 
-    # Add the block_property as a vertex attribute
-    ER.vp["block"] = block_property_random
+        # Iterate over the vertices and assign the block values as vertex attributes
+        block_property_random = ER.new_vertex_property("int")
+        for vertex in ER.vertices():
+            block_property_random[vertex] = blocks_random[vertex]
 
-    # Calculate random modulariy
-    random_DR_modularity = gt.modularity(ER, ER.vp["dark_ratio"], weight=ER.ep["value"])
-    random_SBM_modularity = gt.modularity(ER, ER.vp["block"], weight=ER.ep["value"])
+        # Add the block_property as a vertex attribute
+        ER.vp["block"] = block_property_random
+
+        # Calculate random modulariy
+        random_DR_modularity = gt.modularity(ER, ER.vp["dark_ratio"], weight=ER.ep["value"])
+        random_SBM_modularity = gt.modularity(ER, ER.vp["block"], weight=ER.ep["value"])
+
+        # Add each random modularity to its respective list
+        random_DR_modularity_list.append(random_DR_modularity)
+        random_SBM_modularity_list.append(random_SBM_modularity)
+
+    # Calculate the average of the random modularity measurements
+    avg_random_DR_modularity = sum(random_DR_modularity_list) / len(random_DR_modularity_list)
+    avg_random_SBM_modularity = sum(random_SBM_modularity_list) / len(random_SBM_modularity_list)
 
     # Perform modularity maximization algorithm for directed graphs
     state_maximal = gt.minimize_blockmodel_dl(g, state=gt.ModularityState)
     maximum_modularity = state_maximal.modularity()
 
-    # # calculate clusterring
+    # calculate clustering
     clustering = gt.global_clustering(g, weight=g.ep["value"])
 
     g.gp["real_DR_modularity"] = g.new_graph_property("float", real_DR_modularity)
     g.gp["real_SBM_modularity"] = g.new_graph_property("float", real_SBM_modularity)
-    g.gp["random_DR_modularity"] = g.new_graph_property("float", random_DR_modularity)
-    g.gp["random_SBM_modularity"] = g.new_graph_property("float", random_SBM_modularity)
+    g.gp["random_DR_modularity"] = g.new_graph_property("float", avg_random_DR_modularity)
+    g.gp["random_SBM_modularity"] = g.new_graph_property("float", avg_random_SBM_modularity)
     g.gp["maximum_modularity"] = g.new_graph_property("float", maximum_modularity)
 
     g.save(unitsavelocation)
@@ -179,7 +178,7 @@ def process_timeunit(timeunit):
     # Save data dictionaries after each process
     for key, data_dict in data_dicts.items():
         sorted_data = dict(sorted(data_dict.items(), key=operator.itemgetter(0)))
-        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community', f'{key}_2009-01-03_{end_date}.json')
+        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community_v3', f'{key}_2009-01-03_{end_date}.json')
         with open(file_path, 'w') as f:
             save_json = json.dumps(sorted_data)
             f.write(save_json)
@@ -191,7 +190,7 @@ if __name__ == "__main__":
 
     switcherback = {1:"day", 7:"week", 14:"2weeks", 28:"4weeks"}
 
-    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/community_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/community_logfile_v3", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
     # chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
@@ -236,26 +235,26 @@ if __name__ == "__main__":
             concurrent.futures.wait(futures)
     
     # Load the data from the saved JSON files
-    # data = {}
-    # for key in data_dicts.keys():
-    #     file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community_new', f'{key}_2009-01-03_{end_date}.json')
-    #     with open(file_path, 'r') as f:
-    #         data[key] = json.load(f)
+    data = {}
+    for key in data_dicts.keys():
+        file_path = os.path.join(f'jsonResults_v3/h{options.heuristic}/community_v3', f'{key}_2009-01-03_{end_date}.json')
+        with open(file_path, 'r') as f:
+            data[key] = json.load(f)
 
-    # dates = matplotlib.dates.date2num(x_values)
-    # fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
-    # matplotlib.pyplot.style.use('seaborn-darkgrid')
-    # matplotlib.pyplot.legend(loc="upper left")
-    # # Plot the data from the loaded JSON files
-    # matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
-    # matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
-    # matplotlib.pyplot.legend()
-    # matplotlib.pyplot.gca().set_title("Modularity Scores")
-    # matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community/Modularity_Plot.png', dpi=100)
-    # plt.close(fig)
+    dates = matplotlib.dates.date2num(x_values)
+    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    matplotlib.pyplot.style.use('seaborn-darkgrid')
+    matplotlib.pyplot.legend(loc="upper left")
+    # Plot the data from the loaded JSON files
+    matplotlib.pyplot.plot_date(dates, list(data["real_DR"].values()), '-', linewidth=4, color='black', label="real_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["real_SBM"].values()), '-', linewidth=4, color='dimgray', label="real_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["random_DR"].values()), '-', linewidth=4, color='gray', label="random_DR_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["random_SBM"].values()), '-', linewidth=4, color='lightgray', label="random_SBM_modularity")
+    matplotlib.pyplot.plot_date(dates, list(data["maximum_modularity"].values()), '-', linewidth=4, color='whitesmoke', label="maximum_modularity")
+    matplotlib.pyplot.legend()
+    matplotlib.pyplot.gca().set_title("Modularity Scores")
+    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/community_v3/Modularity_Plot.png', dpi=100)
+    plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")

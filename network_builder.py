@@ -149,8 +149,10 @@ def build_network_with_attributes(current_date):
         logging.info(f'assortativity building of the date:{current_date} is unsuccesful because of OSError')
         return -2.0
 
+    # Measurements at the end of last processed week
     current_assets_dict_full, dark_ratios_dict_full, dark_assets_dict_full = load_dictionaries(previous_date, options.heuristic, switcherback[options.frequency])
 
+    # Measurements at the end of current processed week
     current_assets_dict_full_new, dark_ratios_dict_full_new, dark_assets_dict_full_new = load_dictionaries(current_date, options.heuristic, switcherback[options.frequency])
 
     list_of_nodes = list(g.nodes)
@@ -248,17 +250,17 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG, filename=f"logfiles/daily_weekly_final_heur_{options.heuristic}_v3/shifted_networkbuilder_logfile", filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
     chrono      = SimpleChrono()
-    chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
+    # chain = blocksci.Blockchain(f"{DIR_PARSED}/{options.currency}_2022.cfg")
 
     chrono.print(message="init")
 
     chrono.add_tic('proc')
     if options.start_date == None:
-        start_date = datetime.fromtimestamp(chain.blocks[0].timestamp).date()
+        start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
     else:
         start_date = datetime.strptime(options.start_date, "%Y-%m-%d").date()
     if options.end_date == None:
-        end_date = datetime.fromtimestamp(chain.blocks[-1].timestamp).date()
+        end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
     else:
         end_date = datetime.strptime(options.end_date, "%Y-%m-%d").date()
 
@@ -280,20 +282,20 @@ if __name__ == "__main__":
 
         tqdm_bar.set_description(f"week of '{timeunit.strftime('%Y-%m-%d')} took {chrono.elapsed('net')} sec", refresh=True)
 
-    # with open(f'jsonResults_v3/h{options.heuristic}/NEW_assortativity_2009-01-03_{end_date}.json', 'w') as f:
-    #     results_dict = dict(zip(x_values, y_values_assortativity))
-    #     save_json = json.dumps(results_dict)
-    #     f.write(save_json)
+    with open(f'jsonResults_v3/h{options.heuristic}/NEW_assortativity_2009-01-03_{end_date}.json', 'w') as f:
+        results_dict = dict(zip(x_values, y_values_assortativity))
+        save_json = json.dumps(results_dict)
+        f.write(save_json)
     
-    # dates = matplotlib.dates.date2num(x_values)
-    # fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
-    # matplotlib.pyplot.style.use('seaborn-darkgrid')
-    # matplotlib.pyplot.legend(loc="upper left")
-    # matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
-    # matplotlib.pyplot.legend()
-    # matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
-    # matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/NEW_AssortativityPlot.png', dpi=100)
-    # plt.close(fig)
+    dates = matplotlib.dates.date2num(x_values)
+    fig = matplotlib.pyplot.figure(figsize=(16, 9), dpi=100)
+    matplotlib.pyplot.style.use('seaborn-darkgrid')
+    matplotlib.pyplot.legend(loc="upper left")
+    matplotlib.pyplot.plot_date(dates, y_values_assortativity, 'kx', color='black', linewidth=3)
+    matplotlib.pyplot.legend()
+    matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
+    matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/NEW_AssortativityPlot.png', dpi=100)
+    plt.close(fig)
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")

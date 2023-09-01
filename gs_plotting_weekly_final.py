@@ -207,10 +207,10 @@ if __name__ == "__main__":
         # x_values set to timeunit
         x_values.append(timeunit.strftime('%Y-%m-%d'))
 
-        # Caclculate total CA in Satoshis
+        # Caclculate total CA in BTC
         y_values_total_CA.append(float(sum(current_assets_zarr.values())) * 0.00000001)
 
-        # Caclculate total DA in Satoshis
+        # Caclculate total DA in BTC
         y_values_total_DA.append(float(sum(dark_assets_zarr.values())) * 0.00000001)
 
         # plot darknet market total assets
@@ -362,7 +362,7 @@ if __name__ == "__main__":
             plt.gca().set_title(f'{dnm}')
             plt.plot_date(dates, y_values, 'k-')
             plot_number += 1
-    
+
     plt.subplots_adjust(left=0.125, bottom=0.1, right=0.9, top=0.9, wspace=0.2, hspace=0.5)
     plt.style.use('seaborn-darkgrid')
     fig.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/DNMsPlot.png', dpi=100)

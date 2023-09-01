@@ -25,9 +25,6 @@ def parse_command_line():
                                               default=None, help="name of the currency")
     parser.add_option("--heur", action='store', dest="heuristic", type='str',
                                                   default=None, help="heuristics to apply")
-    #parser.add_option("--overwrite", action='store_true', dest = "overwrite" )
-#    parser.add_option("--period",  action='store', dest="period",
-#                       default = None , help = "minimum block number to process" )
     parser.add_option("--start", action="store", dest="start_date",
                        default = None, help= "starting date for network creation in YYYY-MM-DD format")
     parser.add_option("--end", action="store", dest="end_date",
@@ -39,11 +36,7 @@ def parse_command_line():
 
     options.currency = SYMBOLS[options.currency]
 
-#    options.period = [0,-1] if options.period == None else list( map( int, options.period.split(",")))
-#    assert len(options.period) == 2
-
     switcher = {"day":1, "week":7, "2weeks":14, "4weeks":28}
-
 
     options.cluster_folder = f"{DIR_PARSED}/{options.currency}/heur_{options.heuristic}"
     options.blocks_folder = f"{DIR_PARSED}/{options.currency}/heur_all_data"
@@ -52,7 +45,6 @@ def parse_command_line():
     
     if not os.path.exists(options.networks_folder):
         os.mkdir(options.networks_folder)
-
 
     return options, args
                     
@@ -155,9 +147,7 @@ if __name__ == "__main__":
     matplotlib.pyplot.legend()
     matplotlib.pyplot.gca().set_title("DR Attribute Assortativity")
     matplotlib.pyplot.savefig(f'jsonResults_v3/h{options.heuristic}/graphs/AssortativityPlot.png', dpi=100)
-    plt.close(fig)
-    
-                      
+    plt.close(fig)      
 
     print('Process terminated, graphs and attributes created.')
     print(f"Graphs created in {chrono.elapsed('proc', format='%H:%M:%S')}")
